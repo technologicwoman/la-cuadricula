@@ -1,0 +1,6 @@
+{
+  "name": "La Cuadrícula",
+  "description": "A weekly habit tracker with gamification mechanics, styled in a dark techno-terminal aesthetic.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

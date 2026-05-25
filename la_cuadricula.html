@@ -1,0 +1,1992 @@
+<!DOCTYPE html>
+<html lang="es-CA">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>La Cuadrícula (The Grid)</title>
+  
+  <!-- Google Fonts: JetBrains Mono & Space Grotesk -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- React 18 & ReactDOM via CDNs -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <!-- Babel Standalone compiler to translate JSX on the fly in browser -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <!-- Firebase Compat CDNs (Safe & stable for standalone HTML) -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
+
+  <style>
+    /* Techno-Terminal Strict Visual Styles */
+    :root {
+      --bg-color: #0a0a0f;
+      --card-bg: #0f0f1a;
+      --border-color: #1a1a2e;
+      --text-primary: #e0e0e0;
+      --text-muted: #666666;
+      --text-sub: #555555;
+      --accent-green: #00ff88;
+      --clean-days-color: #88aaff;
+      --gym-color: #ffaa44;
+      --boss-color: #ff44aa;
+      --boss-border: #2a1a4e;
+      --active-cell-bg: #1a1a2e;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg-color);
+      color: var(--text-primary);
+      font-family: 'JetBrains Mono', monospace;
+      padding: 20px;
+      line-height: 1.5;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 100%;
+      margin: 0 auto;
+    }
+
+    /* Core typography labels */
+    h1, h2, h3, h4 {
+      font-family: 'Space Grotesk', sans-serif;
+    }
+
+    .header {
+      display: flex;
+      flex-direction: column;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 20px;
+      margin-bottom: 24px;
+      gap: 16px;
+    }
+
+    @media (min-width: 768px) {
+      .header {
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: flex-end;
+      }
+    }
+
+    .header-left {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .logo-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .title {
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      color: #ffffff;
+      text-transform: uppercase;
+    }
+
+    .sub-tag {
+      font-size: 10px;
+      letter-spacing: 2px;
+      padding: 2px 8px;
+      border: 1px solid var(--border-color);
+      background-color: var(--card-bg);
+      color: rgba(0, 255, 136, 0.75);
+      border-radius: 2px;
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .date-heading-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 8px;
+    }
+
+    .date-heading-row svg {
+      color: #444;
+    }
+
+    .return-btn {
+      color: var(--accent-green);
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 10px;
+      text-decoration: underline;
+      font-family: inherit;
+    }
+
+    .header-right {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .week-nav {
+      display: flex;
+      border: 1px solid var(--border-color);
+      background-color: var(--card-bg);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .nav-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      padding: 6px 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: color 0.15s, background-color 0.15s;
+    }
+
+    .nav-btn:hover {
+      color: #fff;
+      background-color: var(--border-color);
+    }
+
+    .nav-indicator {
+      font-size: 11px;
+      font-weight: bold;
+      color: var(--text-muted);
+      padding: 6px 16px;
+      border-left: 1px solid var(--border-color);
+      border-right: 1px solid var(--border-color);
+      background-color: var(--bg-color);
+    }
+
+    .sync-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      padding: 6px 12px;
+      background-color: var(--card-bg);
+      border: 1px solid rgba(0, 255, 136, 0.2);
+      color: var(--accent-green);
+      border-radius: 6px;
+      font-weight: bold;
+    }
+
+    .sync-dot {
+      width: 8px;
+      height: 8px;
+      background-color: var(--accent-green);
+      border-radius: 50%;
+      display: inline-block;
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0% { transform: scale(0.9); opacity: 0.6; }
+      50% { transform: scale(1.1); opacity: 1; }
+      100% { transform: scale(0.9); opacity: 0.6; }
+    }
+
+    .sync-badge.offline {
+      color: var(--clean-days-color);
+      border-color: rgba(136, 170, 255, 0.3);
+    }
+    
+    .sync-badge.offline .sync-dot {
+      background-color: var(--clean-days-color);
+      animation: none;
+    }
+
+    /* Stats Bento Row */
+    .stats-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 24px;
+    }
+
+    @media (min-width: 992px) {
+      .stats-row {
+        grid-template-columns: repeat(4, 1fr);
+      }
+    }
+
+    .stat-card {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 16px;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .stat-label {
+      font-size: 10px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      font-weight: bold;
+      margin-bottom: 4px;
+    }
+
+    .stat-value {
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 24px;
+      font-weight: 700;
+    }
+
+    .stat-value span {
+      font-size: 11px;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--text-sub);
+      font-weight: normal;
+    }
+
+    .stat-desc {
+      font-size: 9px;
+      color: var(--text-sub);
+      font-weight: bold;
+      margin-top: 4px;
+    }
+
+    .stat-icon-wrapper {
+      padding: 10px;
+      border-radius: 8px;
+    }
+
+    /* Specific Stat Card Colors */
+    .gym-card .stat-value { color: var(--gym-color); }
+    .gym-card .stat-icon-wrapper { background-color: rgba(255, 170, 68, 0.05); border: 1px solid rgba(255, 170, 68, 0.15); }
+    .gym-card svg { color: var(--gym-color); }
+
+    .clean-card .stat-value { color: var(--clean-days-color); }
+    .clean-card .stat-icon-wrapper { background-color: rgba(136, 170, 255, 0.05); border: 1px solid rgba(136, 170, 255, 0.15); }
+    .clean-card svg { color: var(--clean-days-color); }
+
+    .boss-card .stat-value { color: var(--boss-color); }
+    .boss-card .stat-icon-wrapper { background-color: rgba(255, 68, 170, 0.05); border: 1px solid rgba(255, 68, 170, 0.15); }
+    .boss-card svg { color: var(--boss-color); }
+
+    .lifetime-card .stat-value { color: var(--accent-green); }
+    .lifetime-card .stat-icon-wrapper { background-color: rgba(0, 255, 136, 0.05); border: 1px solid rgba(0, 255, 136, 0.15); }
+    .lifetime-card svg { color: var(--accent-green); }
+
+    /* Collapsible rewards section */
+    .rewards-section {
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      background-color: var(--card-bg);
+      margin-bottom: 24px;
+      overflow: hidden;
+    }
+
+    .rewards-toggle-btn {
+      width: 100%;
+      background-color: var(--bg-color);
+      border: none;
+      border-bottom: 1px solid var(--border-color);
+      padding: 12px 16px;
+      color: var(--clean-days-color);
+      font-family: inherit;
+      font-size: 12px;
+      font-weight: bold;
+      text-transform: uppercase;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+    }
+
+    .rewards-toggle-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .rewards-arrow {
+      font-size: 10px;
+      transition: transform 0.2s;
+    }
+
+    .rewards-arrow.expanded {
+      transform: rotate(90deg);
+    }
+
+    .rewards-subtitle {
+      font-size: 9px;
+      color: var(--text-sub);
+      text-transform: none;
+    }
+
+    .rewards-content {
+      padding: 16px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .reward-chip {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      background-color: var(--bg-color);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      font-size: 12px;
+      flex: 1;
+      min-width: 140px;
+      max-width: 210px;
+      transition: border-color 0.2s, background-color 0.2s;
+    }
+
+    .reward-chip.earned {
+      background-color: rgba(0, 255, 136, 0.04);
+      border-color: rgba(0, 255, 136, 0.25);
+      color: #ffffff;
+    }
+
+    .reward-icon {
+      font-size: 16px;
+    }
+
+    .reward-info {
+      flex: 1;
+      overflow: hidden;
+      text-align: left;
+    }
+
+    .reward-name {
+      font-weight: bold;
+      font-size: 10px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .reward-target {
+      font-size: 8px;
+      color: var(--text-sub);
+      font-weight: bold;
+      margin-top: 2px;
+    }
+
+    .reward-indicator {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      border: 1px solid var(--border-color);
+    }
+
+    .reward-chip.earned .reward-indicator {
+      color: var(--accent-green);
+      border-color: var(--accent-green);
+    }
+
+    /* Grid Table Container */
+    .grid-container {
+      border: 1px solid var(--border-color);
+      background-color: var(--card-bg);
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 24px;
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 4px;
+      min-width: 600px;
+    }
+
+    th {
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: bold;
+    }
+
+    th.corner-cell {
+      text-align: left;
+      padding: 10px;
+      background-color: var(--bg-color);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      vertical-align: middle;
+      width: 180px;
+    }
+
+    .corner-label {
+      font-size: 10px;
+      color: var(--clean-days-color);
+      font-weight: bold;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .corner-sublabel {
+      font-size: 8px;
+      color: var(--text-sub);
+      margin-top: 2px;
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: normal;
+    }
+
+    th.day-header {
+      padding: 8px;
+      border: 1px solid var(--border-color);
+      background-color: var(--bg-color);
+      border-radius: 8px;
+      text-align: center;
+    }
+
+    th.day-header.today {
+      background-color: rgba(0, 255, 136, 0.03);
+      border-color: rgba(0, 255, 136, 0.2);
+    }
+
+    .day-name {
+      font-size: 12px;
+      font-weight: bold;
+      color: #ffffff;
+    }
+
+    th.day-header.today .day-name {
+      color: var(--accent-green);
+    }
+
+    .day-date {
+      font-size: 9px;
+      color: var(--text-sub);
+      margin-top: 2px;
+      font-weight: 500;
+      font-family: inherit;
+    }
+
+    th.day-header.today .day-date {
+      color: rgba(0, 255, 136, 0.7);
+    }
+
+    .today-tag {
+      font-size: 7px;
+      color: var(--accent-green);
+      font-weight: bold;
+      margin-top: 2px;
+      text-transform: uppercase;
+    }
+
+    /* Grid Rows */
+    td.f-label-cell {
+      padding: 10px;
+      background-color: rgba(10, 10, 15, 0.5);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+    }
+
+    .f-label-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .f-icon {
+      font-size: 14px;
+    }
+
+    .f-title {
+      font-size: 12px;
+      font-weight: bold;
+      color: #ffffff;
+    }
+
+    .f-desc {
+      font-size: 9px;
+      color: var(--text-sub);
+      font-weight: bold;
+      margin-top: 2px;
+    }
+
+    /* Grid Habit Cells */
+    td.cell-habit {
+      height: 36px;
+      border-radius: 6px;
+      cursor: pointer;
+      position: relative;
+      text-align: center;
+      padding: 0;
+      transition: all 0.2s;
+    }
+
+    td.cell-habit.unchecked {
+      background-color: rgba(10, 10, 15, 0.6);
+      border: 1px solid var(--border-color);
+    }
+
+    td.cell-habit.unchecked:hover {
+      border-color: #333333;
+    }
+
+    td.cell-habit.unchecked.today-col {
+      background-color: rgba(0, 255, 136, 0.015);
+      border-color: rgba(255, 170, 68, 0.15);
+    }
+
+    td.cell-habit.unchecked.today-col:hover {
+      border-color: rgba(255, 170, 68, 0.5);
+    }
+
+    td.cell-habit.checked {
+      background-color: var(--active-cell-bg);
+      border: 2px solid var(--accent-green);
+      box-shadow: 0 0 12px rgba(0, 255, 136, 0.12);
+    }
+
+    td.cell-habit.rest-cell {
+      background-color: rgba(10, 10, 15, 0.2);
+      border: 1px solid rgba(26, 26, 46, 0.3);
+      cursor: not-allowed;
+      opacity: 0.3;
+    }
+
+    .rest-tag {
+      font-size: 8px;
+      font-weight: bold;
+      color: var(--text-sub);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .checkmark {
+      color: var(--accent-green);
+      font-weight: bold;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+    }
+
+    /* Day Theme cell */
+    .theme-label-cell {
+      padding: 10px;
+      background-color: rgba(10, 10, 15, 0.5);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+    }
+
+    .theme-title {
+      font-size: 10px;
+      color: #888;
+      font-weight: bold;
+      text-transform: uppercase;
+    }
+
+    .theme-desc {
+      font-size: 8px;
+      color: var(--text-sub);
+      margin-top: 2px;
+    }
+
+    td.theme-tag-cell {
+      text-align: center;
+      padding: 4px;
+      background-color: rgba(10, 10, 15, 0.3);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      vertical-align: middle;
+    }
+
+    .theme-tag-display {
+      font-size: 9px;
+      font-weight: normal;
+      cursor: pointer;
+      color: var(--text-muted);
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      max-width: 80px;
+      margin: 0 auto;
+      transition: color 0.15s;
+    }
+
+    .theme-tag-display:hover {
+      color: #ffffff;
+    }
+
+    .theme-tag-display.today-text {
+      color: var(--accent-green);
+    }
+
+    .theme-tag-display.empty {
+      color: #333333;
+      font-style: italic;
+    }
+
+    .theme-tag-display.empty:hover {
+      color: #555555;
+    }
+
+    .theme-input {
+      width: 100%;
+      background-color: var(--active-cell-bg);
+      border: 1px solid var(--accent-green);
+      color: var(--accent-green);
+      font-family: inherit;
+      font-size: 9px;
+      text-align: center;
+      padding: 2px 4px;
+      outline: none;
+      border-radius: 3px;
+    }
+
+    /* Boss and Finance bottom grid */
+    .bottom-row {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+
+    @media (min-width: 768px) {
+      .bottom-row {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    .boss-battle-card {
+      background: linear-gradient(135deg, #0f0f1a 0%, #170725 100%);
+      border: 1px solid var(--boss-border);
+      border-radius: 12px;
+      padding: 20px;
+      position: relative;
+    }
+
+    .boss-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .boss-title-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .boss-emoji { font-size: 20px; }
+    .boss-label { font-size: 11px; font-weight: bold; color: var(--boss-color); text-transform: uppercase; letter-spacing: 1px; }
+    .boss-sub { font-size: 8px; color: var(--text-sub); text-transform: uppercase; font-weight: bold; margin-top: 2px; }
+
+    .boss-badge {
+      font-size: 8px;
+      font-weight: bold;
+      text-transform: uppercase;
+      background-color: rgba(0, 255, 136, 0.1);
+      border: 1px solid rgba(0, 255, 136, 0.4);
+      color: var(--accent-green);
+      padding: 2px 8px;
+      border-radius: 2px;
+      letter-spacing: 1px;
+    }
+
+    .boss-inputs {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .boss-text-wrapper {
+      position: relative;
+    }
+
+    .boss-text-input {
+      width: 100%;
+      background-color: rgba(10, 10, 15, 0.8);
+      border: 1px solid var(--boss-border);
+      color: #ffffff;
+      padding: 10px 12px;
+      font-size: 11px;
+      font-family: inherit;
+      border-radius: 8px;
+      outline: none;
+      padding-right: 50px;
+      transition: border-color 0.15s;
+    }
+
+    .boss-text-input:focus {
+      border-color: rgba(255, 68, 170, 0.75);
+    }
+
+    .boss-badge-label {
+      position: absolute;
+      right: 12px;
+      top: 11px;
+      font-size: 9px;
+      color: #444;
+      font-weight: bold;
+    }
+
+    .boss-kill-btn {
+      width: 100%;
+      padding: 10px 16px;
+      border-radius: 8px;
+      font-family: inherit;
+      font-size: 11px;
+      font-weight: bold;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: border-color 0.15s, background-color 0.15s;
+    }
+
+    .boss-kill-btn.disabled {
+      background-color: #111111;
+      border: 1px dashed #222222;
+      color: #333333;
+      cursor: not-allowed;
+    }
+
+    .boss-kill-btn.defeated {
+      background-color: rgba(0, 255, 136, 0.08);
+      border: 1px solid rgba(0, 255, 136, 0.5);
+      color: var(--accent-green);
+    }
+
+    .boss-kill-btn.defeated:hover {
+      background-color: rgba(0, 255, 136, 0.12);
+    }
+
+    .boss-kill-btn.undefeated {
+      background-color: var(--bg-color);
+      border: 1px solid rgba(255, 68, 170, 0.3);
+      color: var(--boss-color);
+    }
+
+    .boss-kill-btn.undefeated:hover {
+      border-color: rgba(255, 68, 170, 0.8);
+      background-color: rgba(255, 68, 170, 0.02);
+    }
+
+    .boss-reward-banner {
+      margin-top: 14px;
+      background-image: linear-gradient(to right, rgba(255, 68, 170, 0.15), rgba(136, 170, 255, 0.15));
+      border: 1px solid rgba(255, 68, 170, 0.3);
+      border-radius: 8px;
+      padding: 10px;
+      text-align: center;
+    }
+
+    .boss-reward-title {
+      font-size: 10px;
+      font-weight: bold;
+      color: #ffffff;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .boss-reward-desc {
+      font-size: 8px;
+      color: var(--clean-days-color);
+      font-weight: bold;
+      margin-top: 4px;
+    }
+
+    /* Finance card */
+    .finance-card {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .finance-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .finance-title-wrapper {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .finance-tag {
+      font-size: 8px;
+      font-weight: bold;
+      text-transform: uppercase;
+      background-color: rgba(136, 170, 255, 0.10);
+      border: 1px solid rgba(136, 170, 255, 0.30);
+      color: var(--clean-days-color);
+      padding: 2px 8px;
+      border-radius: 2px;
+      letter-spacing: 1px;
+    }
+
+    .finance-body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      padding: 12px;
+      border: 1px dashed var(--border-color);
+      border-radius: 8px;
+      margin-top: 8px;
+    }
+
+    .finance-btn {
+      width: 100%;
+      padding: 12px;
+      font-family: inherit;
+      font-size: 11px;
+      font-weight: bold;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .finance-btn:hover {
+      transform: scale(1.02);
+    }
+
+    .finance-btn.unchecked {
+      background-color: var(--bg-color);
+      border: 1px solid var(--border-color);
+      color: var(--text-muted);
+    }
+
+    .finance-btn.unchecked:hover {
+      border-color: var(--clean-days-color);
+      color: #ffffff;
+    }
+
+    .finance-btn.checked {
+      background-color: rgba(136, 170, 255, 0.08);
+      border: 1px solid rgba(136, 170, 255, 0.5);
+      color: var(--clean-days-color);
+    }
+
+    .finance-warning {
+      font-size: 9px;
+      color: rgba(255, 68, 170, 0.85);
+      font-weight: bold;
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      justify-content: center;
+      margin-top: 6px;
+    }
+
+    /* Notes Area */
+    .notes-card {
+      background-color: var(--card-bg);
+      border: 1px solid var(--border-color);
+      padding: 20px;
+      border-radius: 12px;
+      margin-bottom: 24px;
+    }
+
+    .notes-title-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .notes-title {
+      font-size: 11px;
+      font-weight: bold;
+      color: var(--clean-days-color);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    .notes-textarea {
+      width: 100%;
+      background-color: rgba(10, 10, 15, 0.8);
+      border: 1px solid var(--border-color);
+      color: var(--text-primary);
+      padding: 16px;
+      font-size: 11px;
+      font-family: inherit;
+      height: 90px;
+      border-radius: 8px;
+      outline: none;
+      resize: none;
+      transition: border-color 0.15s;
+    }
+
+    .notes-textarea:focus {
+      border-color: rgba(136, 170, 255, 0.5);
+    }
+
+    /* Footer Section */
+    .footer {
+      border-top: 1px solid var(--border-color);
+      padding-top: 20px;
+      margin-top: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .footer-left {
+      font-size: 9px;
+      color: #2a2a2e;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+    }
+
+    .reset-week-btn {
+      background: none;
+      border: 1px solid #2a1a1a;
+      color: #664444;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-family: inherit;
+      font-size: 11px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .reset-week-btn:hover {
+      border-color: #ff4444;
+      color: #ff4444;
+    }
+
+    /* Confirmation Modal Styles */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: rgba(0,0,0,0.85);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .modal-card {
+      background-color: var(--card-bg);
+      border: 1px solid #ff444466;
+      width: 100%;
+      max-width: 380px;
+      border-radius: 12px;
+      padding: 24px;
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: #ff4444;
+      margin-bottom: 12px;
+    }
+
+    .modal-title {
+      font-size: 13px;
+      font-weight: bold;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: #ffffff;
+    }
+
+    .modal-body {
+      font-size: 11px;
+      color: #888888;
+      line-height: 1.6;
+      margin-bottom: 20px;
+    }
+
+    .modal-body strong {
+      color: #ffffff;
+    }
+
+    .modal-footer {
+      display: flex;
+      gap: 8px;
+    }
+
+    .modal-btn {
+      flex: 1;
+      padding: 8px 16px;
+      font-family: inherit;
+      font-size: 11px;
+      font-weight: bold;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background-color 0.15s;
+    }
+
+    .modal-btn-cancel {
+      background-color: var(--border-color);
+      border: none;
+      color: var(--text-muted);
+    }
+
+    .modal-btn-cancel:hover {
+      background-color: #252538;
+    }
+
+    .modal-btn-danger {
+      background-color: rgba(255, 68, 68, 0.13);
+      border: 1px solid #ff4444;
+      color: #ff4444;
+    }
+
+    .modal-btn-danger:hover {
+      background-color: rgba(255, 68, 68, 0.2);
+    }
+
+    /* Custom SVG helper wrappers */
+    svg.icon-inline {
+      display: inline-block;
+      vertical-align: middle;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container" id="root">
+    <!-- React loads here -->
+  </div>
+
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    // --- FIREBASE CONFIGURATION OBJECT ---
+    // PASTE YOUR FIREBASE WEB APP CONFIG HERE
+    const firebaseConfig = {
+      apiKey: "YOUR_FIREBASE_API_KEY",
+      authDomain: "YOUR_FIREBASE_AUTH_DOMAIN",
+      databaseURL: "YOUR_FIREBASE_DATABASE_URL",
+      projectId: "YOUR_FIREBASE_PROJECT_ID",
+      storageBucket: "YOUR_FIREBASE_STORAGE_BUCKET",
+      messagingSenderId: "YOUR_FIREBASE_MESSAGING_SENDER_ID",
+      appId: "YOUR_FIREBASE_APP_ID"
+    };
+
+    // Helper functions
+    const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+    const FOUNDATIONS = [
+      { id: "movement", label: "Movement", icon: "🔥", description: "Gym 7:45 AM" },
+      { id: "substance", label: "Substance", icon: "🌿", description: "No alcohol, weed after noon" },
+      { id: "french", label: "Français", icon: "🇫🇷", description: "Any practice" },
+      { id: "poetry", label: "Poetry", icon: "✒️", description: "Even 2 lines" },
+      { id: "meditation", label: "Meditation", icon: "◉", description: "Not autopilot" }
+    ];
+
+    const REWARDS = [
+      { days: 3, reward: "Starbucks coffee", icon: "☕" },
+      { days: 6, reward: "New track / album", icon: "🎵" },
+      { days: 12, reward: "Wishlist reward", icon: "🎁" },
+      { days: 18, reward: "Experience reward", icon: "✨" },
+      { days: 24, reward: "Major unlock", icon: "👑" }
+    ];
+
+    const DEFAULT_THEMES = {
+      Mon: "BDO + Overflow",
+      Tue: "THEM",
+      Wed: "KonTech",
+      Thu: "French Deep + Poetry",
+      Fri: "Finance + Admin",
+      Sat: "Creative / Flex",
+      Sun: "Review + Plan"
+    };
+
+    const DEFAULT_LIFETIME = {
+      lifetimeGym: 0,
+      cleanDaysTotal: 0,
+      bossChain: 0
+    };
+
+    function isFirebaseConfigured() {
+      return (
+        firebaseConfig.apiKey !== "YOUR_FIREBASE_API_KEY" &&
+        firebaseConfig.apiKey !== "" &&
+        firebaseConfig.projectId !== "YOUR_FIREBASE_PROJECT_ID" &&
+        firebaseConfig.projectId !== ""
+      );
+    }
+
+    function getMondayOfDate(date) {
+      const newDate = new Date(date.getTime());
+      const day = newDate.getDay();
+      const diff = newDate.getDate() - day + (day === 0 ? -6 : 1);
+      return new Date(newDate.setDate(diff));
+    }
+
+    function getWeekKey(date) {
+      const monday = getMondayOfDate(date);
+      const yyyy = monday.getFullYear();
+      const mm = String(monday.getMonth() + 1).padStart(2, '0');
+      const dd = String(monday.getDate()).padStart(2, '0');
+      return `week-${yyyy}-${mm}-${dd}`;
+    }
+
+    function formatWeekRange(date) {
+      const monday = getMondayOfDate(date);
+      const sunday = new Date(monday.getTime());
+      sunday.setDate(monday.getDate() + 6);
+
+      const options = { month: "short", day: "numeric" };
+      const formatter = new Intl.DateTimeFormat("en-CA", options);
+
+      const startStr = formatter.format(monday);
+      const endStr = formatter.format(sunday);
+      const yearStr = monday.getFullYear();
+
+      return `${startStr} — ${endStr}, ${yearStr}`;
+    }
+
+    function createEmptyWeeklyData() {
+      const checks = {};
+      DAYS.forEach(day => {
+        checks[day] = {
+          movement: false,
+          substance: false,
+          french: false,
+          poetry: false,
+          meditation: false
+        };
+      });
+
+      return {
+        checks,
+        bossBattle: "",
+        bossDefeated: false,
+        financeChecked: false,
+        themes: { ...DEFAULT_THEMES },
+        notes: ""
+      };
+    }
+
+    function calculateWeeklyCleanDaysCount(weekData) {
+      let count = 0;
+      DAYS.forEach(day => {
+        const checks = weekData.checks[day];
+        if (checks) {
+          const checkedCount = Object.values(checks).filter(Boolean).length;
+          if (checkedCount >= 4) {
+            count++;
+          }
+        }
+      });
+      return count;
+    }
+
+    // --- Core Application component ---
+    function App() {
+      const [viewedDate, setViewedDate] = useState(new Date());
+      const activeWeekKey = getWeekKey(viewedDate);
+
+      // Auth & Configuration
+      const [userId, setUserId] = useState("local-user");
+      const [firebaseReady, setFirebaseReady] = useState(false);
+
+      // App States
+      const [weeklyDataMap, setWeeklyDataMap] = useState({});
+      const [lifetimeData, setLifetimeData] = useState(DEFAULT_LIFETIME);
+      
+      // UI States
+      const [isRewardsExpanded, setIsRewardsExpanded] = useState(true);
+      const [editingThemeDay, setEditingThemeDay] = useState(null);
+      const [tempThemeValue, setTempThemeValue] = useState("");
+      const [showResetConfirm, setShowResetConfirm] = useState(false);
+
+      const realCurrentDate = new Date();
+      const currentWeekKey = getWeekKey(realCurrentDate);
+      const INDEX_TO_DAY_STRING = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+      const realTodayName = INDEX_TO_DAY_STRING[realCurrentDate.getDay()];
+
+      const activeWeeklyData = weeklyDataMap[activeWeekKey] || createEmptyWeeklyData();
+
+      // Configure/Load Firebase statically
+      useEffect(() => {
+        const connectedState = isFirebaseConfigured();
+        setFirebaseReady(connectedState);
+
+        if (connectedState) {
+          try {
+            // Check if firebase app instance already exists:
+            if (!firebase.apps.length) {
+              firebase.initializeApp(firebaseConfig);
+            }
+            const auth = firebase.auth();
+            const database = firebase.database();
+
+            auth.onAuthStateChanged(user => {
+              if (user) {
+                setUserId(user.uid);
+              } else {
+                auth.signInAnonymously().catch(err => {
+                  console.error("Sigin failed:", err);
+                  setUserId("local-user");
+                });
+              }
+            });
+          } catch (e) {
+            console.error("Firebase startup exception:", e);
+            setUserId("local-user");
+          }
+        } else {
+          setUserId("local-user");
+        }
+      }, []);
+
+      // Realtime syncing observers
+      useEffect(() => {
+        if (!firebaseReady || userId === "local-user") {
+          // Local fallback subscription: read local storage
+          const syncLocalData = () => {
+            // Active Week
+            const weekLocalKey = `la_cuadricula_${userId}_${activeWeekKey}`;
+            const savedWeek = localStorage.getItem(weekLocalKey);
+            if (savedWeek) {
+              try {
+                setWeeklyDataMap(prev => ({ ...prev, [activeWeekKey]: JSON.parse(savedWeek) }));
+              } catch(e) {}
+            } else {
+              setWeeklyDataMap(prev => ({ ...prev, [activeWeekKey]: createEmptyWeeklyData() }));
+            }
+
+            // Past 4 weeks for streaks
+            for (let i = 1; i <= 4; i++) {
+              const pastDate = new Date(viewedDate.getTime() - i * 7 * 24 * 60 * 60 * 1000);
+              const pastKey = getWeekKey(pastDate);
+              const pastSaved = localStorage.getItem(`la_cuadricula_${userId}_${pastKey}`);
+              if (pastSaved) {
+                try {
+                  setWeeklyDataMap(prev => ({ ...prev, [pastKey]: JSON.parse(pastSaved) }));
+                } catch(e) {}
+              }
+            }
+
+            // Lifetime Accumulator
+            const lifetimeLocalKey = `la_cuadricula_${userId}_lifetime`;
+            const savedLifetime = localStorage.getItem(lifetimeLocalKey);
+            if (savedLifetime) {
+              try { setLifetimeData(JSON.parse(savedLifetime)); } catch(e) {}
+            } else {
+              setLifetimeData(DEFAULT_LIFETIME);
+            }
+          };
+
+          syncLocalData();
+          window.addEventListener('storage', syncLocalData);
+          return () => window.removeEventListener('storage', syncLocalData);
+        }
+
+        const database = firebase.database();
+        const userRef = database.ref(`users/${userId}`);
+
+        // Subscribe to viewed week Realtime DB changes
+        const vWeekRef = userRef.child(`weeks/${activeWeekKey}`);
+        vWeekRef.on('value', snapshot => {
+          const val = snapshot.val();
+          if (val) {
+            const defaults = createEmptyWeeklyData();
+            setWeeklyDataMap(prev => ({
+              ...prev,
+              [activeWeekKey]: {
+                checks: { ...defaults.checks, ...val.checks },
+                bossBattle: val.bossBattle || "",
+                bossDefeated: !!val.bossDefeated,
+                financeChecked: !!val.financeChecked,
+                themes: { ...defaults.themes, ...val.themes },
+                notes: val.notes || ""
+              }
+            }));
+          } else {
+            setWeeklyDataMap(prev => ({ ...prev, [activeWeekKey]: createEmptyWeeklyData() }));
+          }
+        });
+
+        // Past weeks observers
+        const unsubPastRefs = [];
+        for (let i = 1; i <= 4; i++) {
+          const pastDate = new Date(viewedDate.getTime() - i * 7 * 24 * 60 * 60 * 1000);
+          const pastKey = getWeekKey(pastDate);
+          const pRef = userRef.child(`weeks/${pastKey}`);
+          unsubPastRefs.push({ ref: pRef, key: pastKey });
+
+          pRef.on('value', snapshot => {
+            const val = snapshot.val();
+            if (val) {
+              setWeeklyDataMap(prev => ({ ...prev, [pastKey]: val }));
+            }
+          });
+        }
+
+        // Subscribe to lifetime statistics
+        const lifetimeRef = userRef.child('lifetime');
+        lifetimeRef.on('value', snapshot => {
+          const val = snapshot.val();
+          if (val) {
+            setLifetimeData({
+              lifetimeGym: Number(val.lifetimeGym || 0),
+              cleanDaysTotal: Number(val.cleanDaysTotal || 0),
+              bossChain: Number(val.bossChain || 0)
+            });
+          } else {
+            setLifetimeData(DEFAULT_LIFETIME);
+          }
+        });
+
+        return () => {
+          vWeekRef.off();
+          lifetimeRef.off();
+          unsubPastRefs.forEach(p => p.ref.off());
+        };
+      }, [userId, firebaseReady, activeWeekKey, viewedDate]);
+
+      const saveWeeklyNode = async (weekKey, data) => {
+        if (firebaseReady && userId !== "local-user") {
+          await firebase.database().ref(`users/${userId}/weeks/${weekKey}`).set(data);
+        } else {
+          localStorage.setItem(`la_cuadricula_${userId}_${weekKey}`, JSON.stringify(data));
+          window.dispatchEvent(new Event('storage'));
+        }
+      };
+
+      const saveLifetimeNode = async (data) => {
+        if (firebaseReady && userId !== "local-user") {
+          await firebase.database().ref(`users/${userId}/lifetime`).set(data);
+        } else {
+          localStorage.setItem(`la_cuadricula_${userId}_lifetime`, JSON.stringify(data));
+          window.dispatchEvent(new Event('storage'));
+        }
+      };
+
+      // Streak mathematics
+      const calculateGymStreak = () => {
+        const gymDaysToCheck = [];
+        for (let i = 0; i < 40; i++) {
+          const checkDate = new Date(realCurrentDate.getTime() - i * 24 * 60 * 60 * 1000);
+          const dayOfWeek = checkDate.getDay();
+          if (dayOfWeek === 0) continue; // Sunday Rest
+
+          const wKey = getWeekKey(checkDate);
+          const dKey = INDEX_TO_DAY_STRING[dayOfWeek];
+          gymDaysToCheck.push({ date: checkDate, weekKey: wKey, dayKey: dKey });
+        }
+
+        if (gymDaysToCheck.length === 0) return 0;
+
+        const firstCheck = gymDaysToCheck[0];
+        const firstWeekData = weeklyDataMap[firstCheck.weekKey];
+        const isFirstChecked = firstWeekData?.checks?.[firstCheck.dayKey]?.movement || false;
+
+        const isTodayFirst = firstCheck.date.toDateString() === realCurrentDate.toDateString();
+        const isSunday = realCurrentDate.getDay() === 0;
+
+        let startIndex = 0;
+        if (!isFirstChecked && (isTodayFirst || isSunday)) {
+          if (gymDaysToCheck.length > 1) {
+            const secondCheck = gymDaysToCheck[1];
+            const secondWeekData = weeklyDataMap[secondCheck.weekKey];
+            const isSecondChecked = secondWeekData?.checks?.[secondCheck.dayKey]?.movement || false;
+            if (isSecondChecked) {
+              startIndex = 1;
+            } else {
+              return 0;
+            }
+          } else {
+            return 0;
+          }
+        }
+
+        let streak = 0;
+        for (let i = startIndex; i < gymDaysToCheck.length; i++) {
+          const item = gymDaysToCheck[i];
+          const weekData = weeklyDataMap[item.weekKey];
+          const isChecked = weekData?.checks?.[item.dayKey]?.movement || false;
+          if (isChecked) {
+            streak++;
+          } else {
+            break;
+          }
+        }
+        return streak;
+      };
+
+      const activeGymStreak = calculateGymStreak();
+      const weeklyCleanDays = calculateWeeklyCleanDaysCount(activeWeeklyData);
+
+      // Handle checkbox logic
+      const handleHabitToggle = async (day, habitId) => {
+        if (day === "Sun" && habitId === "movement") return; // Sunday Rest
+
+        const currentChecks = activeWeeklyData.checks[day] || {
+          movement: false, substance: false, french: false, poetry: false, meditation: false
+        };
+
+        const wasChecked = currentChecks[habitId];
+        const isNowChecked = !wasChecked;
+
+        let gymDelta = 0;
+        let cleanDelta = 0;
+
+        if (habitId === "movement" && day !== "Sun") {
+          gymDelta = isNowChecked ? 1 : -1;
+        }
+
+        const getChecksCount = (ch) => Object.values(ch).filter(Boolean).length;
+        const prevCount = getChecksCount(currentChecks);
+        const updatedChecks = { ...currentChecks, [habitId]: isNowChecked };
+        const nextCount = getChecksCount(updatedChecks);
+
+        const wasClean = prevCount >= 4;
+        const isNowClean = nextCount >= 4;
+
+        if (!wasClean && isNowClean) cleanDelta = 1;
+        else if (wasClean && !isNowClean) cleanDelta = -1;
+
+        const updatedWeek = {
+          ...activeWeeklyData,
+          checks: {
+            ...activeWeeklyData.checks,
+            [day]: updatedChecks
+          }
+        };
+
+        const updatedLifetime = {
+          lifetimeGym: Math.max(0, lifetimeData.lifetimeGym + gymDelta),
+          cleanDaysTotal: Math.max(0, lifetimeData.cleanDaysTotal + cleanDelta),
+          bossChain: lifetimeData.bossChain
+        };
+
+        setWeeklyDataMap(prev => ({ ...prev, [activeWeekKey]: updatedWeek }));
+        setLifetimeData(updatedLifetime);
+
+        await saveWeeklyNode(activeWeekKey, updatedWeek);
+        await saveLifetimeNode(updatedLifetime);
+      };
+
+      // Save Theme Inline
+      const startEditingTheme = (day, currentVal) => {
+        setEditingThemeDay(day);
+        setTempThemeValue(currentVal);
+      };
+
+      const saveThemeText = async (day) => {
+        setEditingThemeDay(null);
+        if (tempThemeValue === activeWeeklyData.themes[day]) return;
+
+        const updatedWeek = {
+          ...activeWeeklyData,
+          themes: {
+            ...activeWeeklyData.themes,
+            [day]: tempThemeValue
+          }
+        };
+
+        setWeeklyDataMap(prev => ({ ...prev, [activeWeekKey]: updatedWeek }));
+        await saveWeeklyNode(activeWeekKey, updatedWeek);
+      };
+
+      // Boss Completes
+      const handleBossCompleteToggle = async () => {
+        const isNowDefeated = !activeWeeklyData.bossDefeated;
+        let nextChain = lifetimeData.bossChain;
+
+        if (isNowDefeated) {
+          nextChain += 1;
+        } else {
+          nextChain = 0; // Reset
+        }
+
+        const updatedWeek = {
+          ...activeWeeklyData,
+          bossDefeated: isNowDefeated
+        };
+
+        const updatedLifetime = {
+          ...lifetimeData,
+          bossChain: nextChain
+        };
+
+        setWeeklyDataMap(prev => ({ ...prev, [activeWeekKey]: updatedWeek }));
+        setLifetimeData(updatedLifetime);
+
+        await saveWeeklyNode(activeWeekKey, updatedWeek);
+        await saveLifetimeNode(updatedLifetime);
+      };
+
+      const handleBossTextBlur = async (e) => {
+        const text = e.target.value;
+        if (text === activeWeeklyData.bossBattle) return;
+
+        const updatedWeek = {
+          ...activeWeeklyData,
+          bossBattle: text
+        };
+
+        setWeeklyDataMap(prev => ({ ...prev, [activeWeekKey]: updatedWeek }));
+        await saveWeeklyNode(activeWeekKey, updatedWeek);
+      };
+
+      // Save Finance Tap
+      const handleToggleFinance = async () => {
+        const updatedWeek = {
+          ...activeWeeklyData,
+          financeChecked: !activeWeeklyData.financeChecked
+        };
+
+        setWeeklyDataMap(prev => ({ ...prev, [activeWeekKey]: updatedWeek }));
+        await saveWeeklyNode(activeWeekKey, updatedWeek);
+      };
+
+      // Save Notes
+      const handleNotesBlur = async (e) => {
+        const text = e.target.value;
+        if (text === activeWeeklyData.notes) return;
+
+        const updatedWeek = {
+          ...activeWeeklyData,
+          notes: text
+        };
+
+        setWeeklyDataMap(prev => ({ ...prev, [activeWeekKey]: updatedWeek }));
+        await saveWeeklyNode(activeWeekKey, updatedWeek);
+      };
+
+      // Reset Active Week
+      const handleResetWeek = async () => {
+        const resetWeek = createEmptyWeeklyData();
+        resetWeek.themes = { ...activeWeeklyData.themes }; // preserves theme customizations
+
+        setWeeklyDataMap(prev => ({ ...prev, [activeWeekKey]: resetWeek }));
+        await saveWeeklyNode(activeWeekKey, resetWeek);
+        setShowResetConfirm(false);
+      };
+
+      const getHeaderDateString = (dayName) => {
+        const monday = new Date(viewedDate.getTime());
+        const day = monday.getDay();
+        const diff = monday.getDate() - day + (day === 0 ? -6 : 1);
+        monday.setDate(diff);
+
+        const offsets = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 };
+        const target = new Date(monday.getTime());
+        target.setDate(monday.getDate() + offsets[dayName]);
+        return target.getDate();
+      };
+
+      const nextReward = [...REWARDS].sort((a,b) => a.days - b.days).find(r => r.days > activeGymStreak) || REWARDS[REWARDS.length-1];
+      const progressPercent = Math.min(100, Math.round((activeGymStreak / nextReward.days) * 100));
+
+      return (
+        <div>
+          {/* Header Block */}
+          <div className="header" id="header_pane">
+            <div className="header-left">
+              <div className="logo-row">
+                <h1 className="title">La Cuadrícula</h1>
+                <span className="sub-tag">The Grid</span>
+              </div>
+              <div className="date-heading-row">
+                <svg className="icon-inline" width="14" height="14" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                <span>{formatWeekRange(viewedDate)}</span>
+                {activeWeekKey !== currentWeekKey && (
+                  <button className="return-btn" onClick={() => setViewedDate(new Date())}>
+                    [Return to Current Week]
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="header-right">
+              <div className="week-nav">
+                <button className="nav-btn" onClick={() => {
+                  const d = new Date(viewedDate.getTime());
+                  d.setDate(viewedDate.getDate() - 7);
+                  setViewedDate(d);
+                }}>&lt;</button>
+                <div className="nav-indicator">WEEK INDEX</div>
+                <button className="nav-btn" onClick={() => {
+                  const d = new Date(viewedDate.getTime());
+                  d.setDate(viewedDate.getDate() + 7);
+                  setViewedDate(d);
+                }}>&gt;</button>
+              </div>
+
+              {firebaseReady ? (
+                <div className="sync-badge">
+                  <span className="sync-dot"></span>
+                  SYNCED ON CLOUD
+                </div>
+              ) : (
+                <div className="sync-badge offline">
+                  <span className="sync-dot"></span>
+                  LOCAL PLAYGROUND
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Stats Bento Grid */}
+          <div className="stats-row">
+            {/* Gym Streak */}
+            <div className="stat-card gym-card">
+              <div>
+                <div className="stat-label">Gym Streak</div>
+                <div className="stat-value">{activeGymStreak} <span>days</span></div>
+                <div className="stat-desc">Active consecutive days Mon-Sat</div>
+              </div>
+              <div className="stat-icon-wrapper">
+                <svg className="icon-inline" width="20" height="20" viewBox="0 0 24 24"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"></path></svg>
+              </div>
+            </div>
+
+            {/* Weekly Clean Days */}
+            <div className="stat-card clean-card">
+              <div>
+                <div className="stat-label">Week Clean Days</div>
+                <div className="stat-value">{weeklyCleanDays} <span>/ 7 days</span></div>
+                <div className="stat-desc">Days with 4+ Checked habits</div>
+              </div>
+              <div className="stat-icon-wrapper">
+                <svg className="icon-inline" width="20" height="20" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path><polyline points="22 4 12 14.01 9 11.01"></polyline></svg>
+              </div>
+            </div>
+
+            {/* Boss Chain */}
+            <div className="stat-card boss-card">
+              <div>
+                <div className="stat-label">Boss Chain</div>
+                <div className="stat-value">{lifetimeData.bossChain} <span>weeks</span></div>
+                <div className="stat-desc">Consecutive boss defeats</div>
+              </div>
+              <div className="stat-icon-wrapper">
+                <svg className="icon-inline" width="20" height="20" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg>
+              </div>
+            </div>
+
+            {/* Lifetime Clean Days */}
+            <div className="stat-card lifetime-card">
+              <div>
+                <div className="stat-label">Lifetime Clean</div>
+                <div className="stat-value">{lifetimeData.cleanDaysTotal} <span>clean</span></div>
+                <div className="stat-desc">Gym total: {lifetimeData.lifetimeGym} sessions</div>
+              </div>
+              <div className="stat-icon-wrapper">
+                <svg className="icon-inline" width="20" height="20" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"></circle><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"></polygon></svg>
+              </div>
+            </div>
+          </div>
+
+          {/* Rewards Milestones section */}
+          <div className="rewards-section">
+            <button className="rewards-toggle-btn" onClick={() => setIsRewardsExpanded(!isRewardsExpanded)}>
+              <span className="rewards-toggle-left">
+                <span className={`rewards-arrow ${isRewardsExpanded ? 'expanded' : ''}`}>▶</span>
+                <span>Streak Rewards</span>
+                <span className="rewards-subtitle">(Current Streak: {activeGymStreak} days)</span>
+              </span>
+              <span style={{ fontSize: '9px', color: '#666' }}>Next goal: {nextReward.days}d ({progressPercent}%)</span>
+            </button>
+
+            {isRewardsExpanded && (
+              <div className="rewards-content">
+                {REWARDS.map((reward, i) => {
+                  const isEarned = activeGymStreak >= reward.days;
+                  return (
+                    <div className={`reward-chip ${isEarned ? 'earned' : ''}`} key={i}>
+                      <span className="reward-icon">{reward.icon}</span>
+                      <div className="reward-info">
+                        <div className="reward-name" style={{ color: isEarned ? '#fff' : '#666' }}>{reward.reward}</div>
+                        <div className="reward-target">{reward.days} DAYS GOAL</div>
+                      </div>
+                      <div className="reward-indicator">
+                        {isEarned ? "✓" : "×"}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Core Table Grid */}
+          <div className="grid-container">
+            <table>
+              <thead>
+                <tr>
+                  <th className="corner-cell">
+                    <div className="corner-label">⚡ FOUNDATIONS</div>
+                    <div className="corner-sublabel">Daily Binary metrics</div>
+                  </th>
+                  {DAYS.map(dayName => {
+                    const isToday = (activeWeekKey === currentWeekKey) && (dayName === realTodayName);
+                    return (
+                      <th className={`day-header ${isToday ? 'today' : ''}`} key={dayName}>
+                        <div className="day-name">{dayName.toUpperCase()}</div>
+                        <div className="day-date">DATE {getHeaderDateString(dayName)}</div>
+                        {isToday && <div className="today-tag">[today]</div>}
+                      </th>
+                    );
+                  })}
+                </tr>
+              </thead>
+
+              <tbody>
+                {FOUNDATIONS.map(f => (
+                  <tr key={f.id}>
+                    <td className="f-label-cell">
+                      <div className="f-label-wrapper">
+                        <span className="f-icon">{f.icon}</span>
+                        <div>
+                          <div className="f-title">{f.label}</div>
+                          <div className="f-desc">{f.description}</div>
+                        </div>
+                      </div>
+                    </td>
+
+                    {DAYS.map(dayName => {
+                      const isSundayGym = dayName === "Sun" && f.id === "movement";
+                      const isChecked = activeWeeklyData.checks[dayName]?.[f.id] || false;
+                      const isToday = (activeWeekKey === currentWeekKey) && (dayName === realTodayName);
+
+                      if (isSundayGym) {
+                        return (
+                          <td className="cell-habit rest-cell" key={dayName}>
+                            <span className="rest-tag">rest</span>
+                          </td>
+                        );
+                      }
+
+                      return (
+                        <td 
+                          className={`cell-habit ${isChecked ? 'checked' : 'unchecked'} ${isToday ? 'today-col' : ''}`} 
+                          key={dayName}
+                          onClick={() => handleHabitToggle(dayName, f.id)}
+                        >
+                          {isChecked && <div className="checkmark">✓</div>}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+
+                {/* Editable themes tag */}
+                <tr>
+                  <td className="theme-label-cell">
+                    <div className="theme-title">Day Theme</div>
+                    <div className="theme-desc">Editable tags</div>
+                  </td>
+                  {DAYS.map(dayName => {
+                    const themeText = activeWeeklyData.themes[dayName] || "";
+                    const isEditing = editingThemeDay === dayName;
+                    const isToday = (activeWeekKey === currentWeekKey) && (dayName === realTodayName);
+
+                    return (
+                      <td className="theme-tag-cell" key={dayName}>
+                        {isEditing ? (
+                          <input 
+                            type="text" 
+                            className="theme-input"
+                            value={tempThemeValue}
+                            onChange={e => setTempThemeValue(e.target.value)}
+                            onBlur={() => saveThemeText(dayName)}
+                            onKeyDown={e => {
+                              if (e.key === "Enter") saveThemeText(dayName);
+                              if (e.key === "Escape") setEditingThemeDay(null);
+                            }}
+                            autoFocus
+                            maxLength={32}
+                          />
+                        ) : (
+                          <div 
+                            className={`theme-tag-display ${themeText ? (isToday ? 'today-text' : '') : 'empty'}`}
+                            onClick={() => startEditingTheme(dayName, themeText)}
+                          >
+                            {themeText || "[No Tag]"}
+                          </div>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          {/* Boss Battle + Finance Check-in */}
+          <div className="bottom-row">
+            {/* Boss Battle */}
+            <div className="boss-battle-card" style={{ borderColor: activeWeeklyData.bossDefeated ? '#00ff88' : '#2a1a4e' }}>
+              <div className="boss-header">
+                <div className="boss-title-wrapper">
+                  <span className="boss-emoji">👾</span>
+                  <div>
+                    <h3 className="boss-label">Boss Fight</h3>
+                    <p className="boss-sub">measurable weekly metric</p>
+                  </div>
+                </div>
+                {activeWeeklyData.bossDefeated && <span className="boss-badge">DEFEATED</span>}
+              </div>
+
+              <div className="boss-inputs">
+                <div className="boss-text-wrapper">
+                  <input 
+                    type="text" 
+                    className="boss-text-input"
+                    value={activeWeeklyData.bossBattle}
+                    placeholder="Declare measurable objective..."
+                    onChange={e => {
+                      const text = e.target.value;
+                      setWeeklyDataMap(prev => ({
+                        ...prev, [activeWeekKey]: { ...activeWeeklyData, bossBattle: text }
+                      }));
+                    }}
+                    onBlur={handleBossTextBlur}
+                    onKeyDown={e => { if (e.key === "Enter") e.currentTarget.blur(); }}
+                  />
+                  <span className="boss-badge-label">WEEKLY</span>
+                </div>
+
+                <button 
+                  className={`boss-kill-btn ${!activeWeeklyData.bossBattle.trim() ? 'disabled' : (activeWeeklyData.bossDefeated ? 'defeated' : 'undefeated')}`}
+                  disabled={!activeWeeklyData.bossBattle.trim()}
+                  onClick={handleBossCompleteToggle}
+                >
+                  {activeWeeklyData.bossDefeated ? "✓ BOSS DEFEATED [+1 BOSS CHAIN]" : "⚔️ MARK GOAL [DEFEATED]"}
+                </button>
+              </div>
+
+              {lifetimeData.bossChain >= 4 && (
+                <div className="boss-reward-banner">
+                  <div className="boss-reward-title">🏆 MONTHLY REWARD ACHIEVED 🏆</div>
+                  <div className="boss-reward-desc">You are maintaining a 4+ undefeated weekly boss chest!</div>
+                </div>
+              )}
+            </div>
+
+            {/* Finance Check-In */}
+            <div className="finance-card">
+              <div className="finance-header">
+                <div className="finance-title-wrapper">
+                  <span className="boss-emoji">📊</span>
+                  <div>
+                    <h3 className="boss-label" style={{ color: 'var(--clean-days-color)' }}>Finance Check-in</h3>
+                    <p className="boss-sub">weekly review item</p>
+                  </div>
+                </div>
+                {activeWeeklyData.financeChecked && <span className="finance-tag">COMPLETED</span>}
+              </div>
+
+              <div className="finance-body">
+                <button 
+                  className={`finance-btn ${activeWeeklyData.financeChecked ? 'checked' : 'unchecked'}`}
+                  onClick={handleToggleFinance}
+                >
+                  {activeWeeklyData.financeChecked ? "✓ Done this week" : "Tap when you've looked at it"}
+                </button>
+
+                <div className="finance-warning">
+                  ⚠️ Skip 2 weeks → becomes boss battle.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Somatic Signals Notes */}
+          <div className="notes-card">
+            <div className="notes-title-row">
+              <span>📝</span>
+              <span className="notes-title">Weekly somatic signals & notes</span>
+            </div>
+            <textarea 
+              className="notes-textarea"
+              placeholder="Somatic signals, wins, adjustments..."
+              defaultValue={activeWeeklyData.notes}
+              onBlur={handleNotesBlur}
+            />
+          </div>
+
+          {/* Footer block */}
+          <div className="footer">
+            <div className="footer-left">La Cuadrícula v1</div>
+            <button className="reset-week-btn" onClick={() => setShowResetConfirm(true)}>RESET WEEK</button>
+          </div>
+
+          {/* Reset confirm dialog modal */}
+          {showResetConfirm && (
+            <div className="modal-overlay">
+              <div className="modal-card">
+                <div className="modal-header">
+                  <span>⚠️</span>
+                  <div className="modal-title">Confirm Week Reset</div>
+                </div>
+                <div className="modal-body">
+                  This will clear all 5 checked habits, notes, boss battle completion, and finance review markers for the week index <strong>{activeWeekKey}</strong>. 
+                  <br /><br />
+                  Your Day Theme Tags and Lifetime totals (gym days, clean days accumulated, boss kill chains) will be <strong>preserved</strong>.
+                </div>
+                <div className="modal-footer">
+                  <button className="modal-btn modal-btn-cancel" onClick={() => setShowResetConfirm(false)}>CANCEL</button>
+                  <button className="modal-btn modal-btn-danger" onClick={handleResetWeek}>RESET NOW</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // Mount application
+    const rootEl = document.getElementById("root");
+    const reactRoot = ReactDOM.createRoot(rootEl);
+    reactRoot.render(<App />);
+  </script>
+</body>
+</html>
