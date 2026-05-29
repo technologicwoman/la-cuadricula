@@ -38,7 +38,9 @@ import {
   subscribeToWeek, 
   subscribeToLifetime, 
   updateWeeklyData, 
-  updateLifetimeData 
+  updateLifetimeData,
+  signInWithGoogle,
+  logoutUser
 } from "./firebaseService";
 import { calculateGymStreak, calculateWeeklyCleanDaysCount } from "./trackerLogic";
 
@@ -47,10 +49,17 @@ export default function App() {
   const [viewedDate, setViewedDate] = useState<Date>(new Date());
   const activeWeekKey = getWeekKey(viewedDate);
 
-  // Authentication & Session
-  const [userId, setUserId] = useState<string | null>(null);
+  // Authentication & Session State
+  const [username, setUsername] = useState<string | null>(() => {
+    return localStorage.getItem("la_cuadricula_username") || null;
+  });
+  const [userId, setUserId] = useState<string | null>(() => {
+    return localStorage.getItem("la_cuadricula_username") || null;
+  });
   const [isFirebaseConnected, setIsFirebaseConnected] = useState<boolean>(false);
-  const [, setAuthLoading] = useState<boolean>(true);
+  const [isAuthReady, setIsAuthReady] = useState<boolean>(false);
+  const [authLoading, setAuthLoading] = useState<boolean>(true);
+  const [firebasePermissionError, setFirebasePermissionError] = useState<string | null>(null);
 
   // Database States
   const [weeklyDataMap, setWeeklyDataMap] = useState<Record<string, WeeklyData>>({});
@@ -73,6 +82,56 @@ export default function App() {
   // Active weekly data for the current viewed week
   const activeWeeklyData = weeklyDataMap[activeWeekKey] || createEmptyWeeklyData();
 
+  // Helper function to sanitize usernames to be valid paths and clean casing
+  const sanitizeUsername = (name: string): string => {
+    return name
+      .trim()
+      .toLowerCase()
+      .replace(/[.$#[\]/]/g, "") // remove firebase path illegal characters
+      .replace(/\s+/g, "_"); // convert spaces to underscores
+  };
+
+  // Profile setup handler
+  const handleSetUsername = async (newUsernameRaw: string, importCurrentData: boolean) => {
+    const sanitized = sanitizeUsername(newUsernameRaw);
+    if (!sanitized) return;
+
+    localStorage.setItem("la_cuadricula_username", sanitized);
+
+    if (importCurrentData) {
+      // Migrate and synchronize existing client state to the new workspace username
+      const activeDataPoint = weeklyDataMap[activeWeekKey];
+      if (activeDataPoint) {
+        await updateWeeklyData(sanitized, activeWeekKey, activeDataPoint);
+      }
+      if (lifetimeData) {
+        await updateLifetimeData(sanitized, lifetimeData);
+      }
+      // Also write all other loaded weeks
+      for (const [wKey, wData] of Object.entries(weeklyDataMap)) {
+        if (wData) {
+          await updateWeeklyData(sanitized, wKey, wData as WeeklyData);
+        }
+      }
+    }
+
+    setUsername(sanitized);
+    setUserId(sanitized);
+  };
+
+  // Switch or Disconnect Profile
+  const handleLogout = async () => {
+    localStorage.removeItem("la_cuadricula_username");
+    setUsername(null);
+    setUserId(null);
+    setFirebasePermissionError(null);
+    try {
+      await logoutUser();
+    } catch (e: any) {
+      console.warn("Sign out failure: " + (e?.message || String(e)));
+    }
+  };
+
   // Get date strings for each column header
   const getHeaderDateString = (dayName: DayName) => {
     const monday = new Date(viewedDate.getTime());
@@ -94,16 +153,84 @@ export default function App() {
     const configured = isFirebaseConfigured();
     setIsFirebaseConnected(configured);
 
-    authenticateUser((uid, authenticatedViaFirebase) => {
-      setUserId(uid);
-      setIsFirebaseConnected(authenticatedViaFirebase);
-      setAuthLoading(false);
-    });
+    // If Firebase is configured, listen to real Auth state changes.
+    // Otherwise, use fallback anonymous authenticateUser flow.
+    let unsubscribeAuth: (() => void) | undefined;
+
+    if (configured) {
+      const initAndListen = async () => {
+        try {
+          const { initializeFirebaseApp } = await import("./firebaseService");
+          const { auth } = await initializeFirebaseApp();
+          if (auth) {
+            const { onAuthStateChanged, signInAnonymously } = await import("firebase/auth");
+            unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+              if (user) {
+                setIsFirebaseConnected(true);
+                setIsAuthReady(true);
+                setAuthLoading(false);
+
+                // Check if user has a Google Provider linked
+                const googleProvider = user.providerData.some(p => p.providerId === "google.com");
+                if (googleProvider || !user.isAnonymous) {
+                  const googleName = user.displayName || user.email?.split("@")[0] || "google_user";
+                  const sanitized = sanitizeUsername(googleName);
+                  localStorage.setItem("la_cuadricula_username", sanitized);
+                  setUsername(sanitized);
+                  setUserId(user.uid); // Use clean Google secure UID
+                } else {
+                  // Standard Anonymous user loaded
+                  const localNick = localStorage.getItem("la_cuadricula_username");
+                  if (localNick) {
+                    setUsername(localNick);
+                    setUserId(localNick);
+                  }
+                }
+              } else {
+                // Not authenticated, trigger anonymous
+                try {
+                  await signInAnonymously(auth);
+                } catch (e: any) {
+                  console.warn("Auto anonymous auth failed: " + (e?.message || String(e)));
+                  setIsAuthReady(true);
+                  setAuthLoading(false);
+                }
+              }
+            });
+          } else {
+            setIsAuthReady(true);
+            setAuthLoading(false);
+          }
+        } catch (err: any) {
+          console.error("Firebase auth listen initialization failed: " + (err?.message || String(err)));
+          setIsAuthReady(true);
+          setAuthLoading(false);
+        }
+      };
+      initAndListen();
+    } else {
+      authenticateUser((uid, authenticatedViaFirebase) => {
+        setIsFirebaseConnected(authenticatedViaFirebase);
+        setIsAuthReady(true);
+        setAuthLoading(false);
+      });
+    }
+
+    const handlePermError = (event: Event) => {
+      const customEvent = event as CustomEvent;
+      setFirebasePermissionError(customEvent.detail?.message || "PERMISSION_DENIED");
+    };
+
+    window.addEventListener("firebase_permission_error", handlePermError);
+    return () => {
+      if (unsubscribeAuth) unsubscribeAuth();
+      window.removeEventListener("firebase_permission_error", handlePermError);
+    };
   }, []);
 
   // Listen to viewed week changes under current user
   useEffect(() => {
-    if (!userId) return;
+    if (!userId || !isAuthReady) return;
 
     // Subscribe to viewed week data
     const unsubPromise = subscribeToWeek(userId, activeWeekKey, (data) => {
@@ -355,9 +482,165 @@ export default function App() {
     setTimeout(() => setCopySuccess(false), 2000);
   };
 
+  // 1. Initial background auth session loading spinner
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-[#050508] text-[#e0e0e0] font-mono flex items-center justify-center p-4">
+        <div className="flex flex-col items-center gap-4">
+          <div className="relative w-12 h-12">
+            <div className="absolute inset-0 border border-[#88aaff]/30 rounded-lg animate-spin" style={{ animationDuration: "3s" }}></div>
+            <div className="absolute inset-2 border border-[#00ff88]/30 rounded-lg animate-spin" style={{ animationDuration: "1.5s" }}></div>
+          </div>
+          <span className="text-[10px] uppercase tracking-widest text-gray-500 font-extrabold animate-pulse font-mono">
+            BOOTING LA CUADRÍCULA...
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. Access Portal screen if no username/profile is registered yet
+  if (!username) {
+    return (
+      <div className="min-h-screen bg-[#050508] text-[#e0e0e0] font-mono flex items-center justify-center p-6 relative overflow-hidden select-none">
+        {/* Subtle, soft ambient background glow */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 rounded-full bg-[#00ff88]/2 blur-[100px] pointer-events-none"></div>
+
+        <motion.div 
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, ease: "easeOut" }}
+          className="max-w-xs w-full text-center space-y-10 relative z-10"
+          id="access_portal_card"
+        >
+          {/* Typographic Title */}
+          <div className="space-y-2">
+            <h2 className="text-[10px] font-extrabold text-[#88aaff] uppercase tracking-[0.35em] opacity-80">
+              LA CUADRÍCULA
+            </h2>
+            <div className="h-[1px] w-6 bg-[#1e1e35] mx-auto"></div>
+          </div>
+
+          <form 
+            onSubmit={(e) => {
+              e.preventDefault();
+              const inputEl = document.getElementById("username_input") as HTMLInputElement;
+              if (inputEl) {
+                handleSetUsername(inputEl.value, true);
+              }
+            }}
+            className="space-y-6"
+          >
+            <div className="space-y-3">
+              <input 
+                type="text"
+                id="username_input"
+                name="username"
+                required
+                placeholder="NICKNAME"
+                minLength={3}
+                maxLength={25}
+                pattern="^[a-zA-Z0-9_\-]+$"
+                title="Only letters, numbers, underscores, or hyphens"
+                autoComplete="off"
+                className="w-full bg-transparent border-b border-[#1e1e35] text-[#00ff88] py-2 text-center text-xs font-extrabold tracking-[0.2em] placeholder-gray-700 focus:outline-none focus:border-[#00ff88]/60 transition-colors uppercase"
+              />
+              <span className="block text-[8px] uppercase tracking-widest text-gray-500 font-bold font-mono">
+                Alphanumeric / Underscore / Hyphen
+              </span>
+            </div>
+
+            <button 
+              type="submit"
+              className="w-full py-2.5 bg-[#00ff88]/5 hover:bg-[#00ff88]/10 border border-[#1e1e35] hover:border-[#00ff88]/30 text-gray-400 hover:text-[#00ff88] text-[9px] uppercase font-bold tracking-[0.15em] rounded-lg cursor-pointer transition-all duration-300 active:scale-[0.98] flex items-center justify-center gap-1"
+              id="btn_enter_grid"
+            >
+              ENTER GRID <ChevronRight className="w-3 h-3 text-current" />
+            </button>
+
+            {isFirebaseConnected && (
+              <div className="space-y-4 pt-4 border-t border-[#1e1e35]/60">
+                <span className="block text-[8px] uppercase tracking-widest text-gray-500 font-bold font-mono">
+                  OR AUTHENTICATE SECURELY WITH
+                </span>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await signInWithGoogle();
+                    } catch (e: any) {
+                      console.error("Google sign in error: " + (e?.message || String(e)));
+                      const errMsg = String(e?.message || e || "");
+                      if (errMsg.includes("auth/popup-closed-by-user")) {
+                        // Safe ignore
+                      } else {
+                        setFirebasePermissionError(e?.message || "Google sign in failed. Please ensure Google provider is enabled in your Firebase auth console.");
+                      }
+                    }
+                  }}
+                  className="w-full py-2.5 bg-[#4285F4]/10 hover:bg-[#4285F4]/20 border border-[#4285F4]/30 hover:border-[#4285F4]/50 text-[#549cff] hover:text-white text-[9px] uppercase font-bold tracking-[0.15em] rounded-lg cursor-pointer transition-all duration-300 active:scale-[0.98] flex items-center justify-center gap-2"
+                >
+                  <svg className="w-3.5 h-3.5" viewBox="0 0 24 24">
+                    <path
+                      fill="currentColor"
+                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                    />
+                    <path
+                      fill="currentColor"
+                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                    />
+                    <path
+                      fill="currentColor"
+                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                    />
+                    <path
+                      fill="currentColor"
+                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                    />
+                  </svg>
+                  SIGN IN WITH GOOGLE
+                </button>
+              </div>
+            )}
+          </form>
+        </motion.div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#050508] text-[#e0e0e0] font-mono select-none px-4 py-8 md:p-10 flex flex-col justify-between max-w-7xl mx-auto">
       
+      {/* Permission Warning Banner */}
+      {firebasePermissionError && (
+        <motion.div 
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-6 p-4 rounded-xl border border-rose-500/30 bg-rose-500/5 text-rose-400 text-xs leading-relaxed font-sans shadow-lg flex flex-col md:flex-row items-start md:items-center justify-between gap-4"
+        >
+          <div className="flex items-start gap-3">
+            <span className="p-1 px-2 rounded bg-rose-500/20 text-rose-300 font-extrabold font-mono text-[10px] tracking-wider uppercase">
+              FIREBASE ERROR
+            </span>
+            <div>
+              <p className="font-extrabold text-[#ff6b8b] mb-0.5">
+                Database Permission Denied (Secure Fallback Activated)
+              </p>
+              <p className="text-gray-400 font-medium">
+                The Realtime Database rejected a sync command. Usually means permissions/rules should be updated or Anonymous Auth isn't enabled in the Firebase console. <strong>We are automatically saving to local device memory so you won't lose any data!</strong>
+              </p>
+            </div>
+          </div>
+          <button 
+            onClick={() => setShowConfigModal(true)}
+            className="px-3.5 py-1.5 shrink-0 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-300 hover:text-white rounded-lg text-[10px] font-bold transition-all cursor-pointer flex items-center gap-1.5 font-mono"
+          >
+            <Terminal className="w-3.5 h-3.5" />
+            VIEW SETUP GUIDE
+          </button>
+        </motion.div>
+      )}
+
       {/* 1. Header Block */}
       <motion.header 
         initial={{ opacity: 0, y: 8 }}
@@ -416,6 +699,19 @@ export default function App() {
               <ChevronRight className="w-4 h-4" />
             </button>
           </div>
+
+          {/* UserName Indicator / Disconnect */}
+          {username && (
+            <button 
+              onClick={handleLogout}
+              className="px-3.5 py-2 rounded-lg border border-[#1e1e35] bg-[#0c0c16] hover:bg-[#ff4444]/5 hover:border-[#ff4444]/30 text-xs text-gray-400 hover:text-[#ff4444] font-bold tracking-wider flex items-center gap-1.5 transition-all cursor-pointer shadow-sm font-mono group"
+              title="Click to change profile/workspace name"
+              id="btn_profile_indicator"
+            >
+              <span className="text-gray-500 group-hover:text-[#ff4444]/60">👤 BOARD:</span>
+              <span className="text-[#00ff88] font-extrabold uppercase group-hover:text-[#ff4444]">{username}</span>
+            </button>
+          )}
 
           {/* Connected state indicators */}
           {isFirebaseConnected ? (
@@ -1119,26 +1415,26 @@ export default function App() {
                     </p>
                   </div>
 
-                  <div>
-                    <h4 className="font-extrabold text-white uppercase tracking-wider mb-1 font-mono text-[10px]">
-                      3. Create a Realtime Database and Rules
-                    </h4>
-                    <p className="text-gray-400 font-medium leading-relaxed font-sans">
-                      Go to <strong>Build &gt; Realtime Database</strong>. Click "Create Database". Select "Configure Security Rules" as "Start in Locked Mode". Once created, click on the "Rules" tab and paste this secure schema:
-                    </p>
-                    <pre className="mt-2.5 p-3.5 bg-[#030305] border border-[#1e1e35] text-[#ff44aa] rounded-xl overflow-auto font-mono text-[9.5px] leading-relaxed select-all">
+                   <div>
+                     <h4 className="font-extrabold text-white uppercase tracking-wider mb-1 font-mono text-[10px]">
+                       3. Create a Realtime Database and Rules
+                     </h4>
+                     <p className="text-gray-400 font-medium leading-relaxed font-sans font-medium text-[11px] mb-2">
+                       Go to <strong>Build &gt; Realtime Database</strong>. Click "Create Database". Select "Configure Security Rules" as "Start in Locked Mode". Once created, click on the "Rules" tab and paste this secure schema to allow multi-device sync with username tags:
+                     </p>
+                     <pre className="mt-2.5 p-3.5 bg-[#030305] border border-[#1e1e35] text-[#ff44aa] rounded-xl overflow-auto font-mono text-[9.5px] leading-relaxed select-all">
 {`{
   "rules": {
     "users": {
-      "$uid": {
-        ".read": "$uid === auth.uid",
-        ".write": "$uid === auth.uid"
+      "$username": {
+        ".read": "auth != null",
+        ".write": "auth != null"
       }
     }
   }
 }`}
-                    </pre>
-                  </div>
+                     </pre>
+                   </div>
 
                   <div>
                     <h4 className="font-extrabold text-white uppercase tracking-wider mb-1 font-mono text-[10px]">

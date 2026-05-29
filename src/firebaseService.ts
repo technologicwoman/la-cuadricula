@@ -7,6 +7,22 @@ import { firebaseConfig, isFirebaseConfigured } from "./firebaseConfig";
 import { WeeklyData, LifetimeData } from "./types";
 import { createEmptyWeeklyData, DEFAULT_LIFETIME_DATA } from "./defaultData";
 
+export function checkAndNotifyPermissionError(error: any) {
+  if (!error) return;
+  const errMsg = String(error.message || error || "").toUpperCase();
+  if (
+    errMsg.includes("PERMISSION_DENIED") || 
+    errMsg.includes("PERMISSION DENIED") || 
+    errMsg.includes("UNAUTHORIZED")
+  ) {
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("firebase_permission_error", { 
+        detail: { message: error.message || String(error) } 
+      }));
+    }
+  }
+}
+
 // Core exports that will be initialized conditionally
 let appInstance: any = null;
 let authInstance: any = null;
@@ -29,8 +45,8 @@ export async function initializeFirebaseApp() {
       dbInstance = getDatabase(appInstance);
       isInitialized = true;
       console.log("Firebase initialized successfully with project id:", firebaseConfig.projectId);
-    } catch (err) {
-      console.error("Failed to initialize Firebase SDK:", err);
+    } catch (err: any) {
+      console.error("Failed to initialize Firebase SDK: " + (err?.message || String(err)));
     }
   } else {
     console.warn("Firebase not configured. Running in local fallback mode.");
@@ -51,12 +67,12 @@ export async function authenticateUser(onUserReady: (uid: string, isAnonymous: b
 
     onAuthStateChanged(auth, async (user) => {
       if (user) {
-        onUserReady(user.uid, true);
+        onUserReady(user.uid, user.isAnonymous);
       } else {
         try {
           await signInAnonymously(auth);
-        } catch (err) {
-          console.error("Anonymous authentication failed:", err);
+        } catch (err: any) {
+          console.error("Anonymous authentication failed: " + (err?.message || String(err)));
           // Fallback to local user ID on database connection issues
           onUserReady("local-user-fallback", false);
         }
@@ -67,6 +83,32 @@ export async function authenticateUser(onUserReady: (uid: string, isAnonymous: b
     setTimeout(() => {
       onUserReady("local-user-device", false);
     }, 150);
+  }
+}
+
+/**
+ * Signs in with Google using a popup.
+ */
+export async function signInWithGoogle() {
+  const { auth } = await initializeFirebaseApp();
+  if (auth) {
+    const { GoogleAuthProvider, signInWithPopup } = await import("firebase/auth");
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: "select_account" });
+    const result = await signInWithPopup(auth, provider);
+    return result.user;
+  }
+  throw new Error("Firebase auth not configured.");
+}
+
+/**
+ * Logs out the current user.
+ */
+export async function logoutUser() {
+  const { auth } = await initializeFirebaseApp();
+  if (auth) {
+    const { signOut } = await import("firebase/auth");
+    await signOut(auth);
   }
 }
 
@@ -100,6 +142,22 @@ export async function subscribeToWeek(
         onData(merged);
       } else {
         // If no data exists in DB yet, serve empty structure
+        onData(createEmptyWeeklyData());
+      }
+    }, (error) => {
+      console.warn("Firebase permission or subscription error for week " + weekKey + ": " + (error?.message || String(error)));
+      checkAndNotifyPermissionError(error);
+      // Fallback: read local storage
+      const localKey = `la_cuadricula_${uid}_${weekKey}`;
+      const localStr = localStorage.getItem(localKey);
+      if (localStr) {
+        try {
+          const parsed = JSON.parse(localStr);
+          onData(parsed);
+        } catch (e) {
+          onData(createEmptyWeeklyData());
+        }
+      } else {
         onData(createEmptyWeeklyData());
       }
     });
@@ -149,6 +207,21 @@ export async function subscribeToLifetime(
       } else {
         onData(DEFAULT_LIFETIME_DATA);
       }
+    }, (error) => {
+      console.warn("Firebase permission or subscription error for lifetime: " + (error?.message || String(error)));
+      checkAndNotifyPermissionError(error);
+      // Fallback: read local storage
+      const localKey = `la_cuadricula_${uid}_lifetime`;
+      const localStr = localStorage.getItem(localKey);
+      if (localStr) {
+        try {
+          onData(JSON.parse(localStr));
+        } catch (e) {
+          onData(DEFAULT_LIFETIME_DATA);
+        }
+      } else {
+        onData(DEFAULT_LIFETIME_DATA);
+      }
     });
 
     return () => off(lifetimeRef, "value", unsubscribe);
@@ -177,7 +250,16 @@ export async function updateWeeklyData(uid: string, weekKey: string, data: Weekl
   if (db) {
     const { ref, set } = await import("firebase/database");
     const weekRef = ref(db, `users/${uid}/weeks/${weekKey}`);
-    await set(weekRef, data);
+    try {
+      await set(weekRef, data);
+    } catch (err: any) {
+      console.warn("Failed to write weekly data to Firebase, saving locally: " + (err?.message || String(err)));
+      checkAndNotifyPermissionError(err);
+      // Local Storage save
+      const localKey = `la_cuadricula_${uid}_${weekKey}`;
+      localStorage.setItem(localKey, JSON.stringify(data));
+      window.dispatchEvent(new Event("storage"));
+    }
   } else {
     // Local Storage save
     const localKey = `la_cuadricula_${uid}_${weekKey}`;
@@ -196,7 +278,15 @@ export async function updateLifetimeData(uid: string, data: LifetimeData) {
   if (db) {
     const { ref, set } = await import("firebase/database");
     const lifetimeRef = ref(db, `users/${uid}/lifetime`);
-    await set(lifetimeRef, data);
+    try {
+      await set(lifetimeRef, data);
+    } catch (err: any) {
+      console.warn("Failed to write lifetime data to Firebase, saving locally: " + (err?.message || String(err)));
+      checkAndNotifyPermissionError(err);
+      const localKey = `la_cuadricula_${uid}_lifetime`;
+      localStorage.setItem(localKey, JSON.stringify(data));
+      window.dispatchEvent(new Event("storage"));
+    }
   } else {
     const localKey = `la_cuadricula_${uid}_lifetime`;
     localStorage.setItem(localKey, JSON.stringify(data));

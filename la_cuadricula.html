@@ -4,6 +4,53 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>La Cuadrícula (The Grid)</title>
+  <script>
+    // Prevent crash when third-party libraries try to assign to window.fetch inside secure sandbox iframes
+    (function() {
+      try {
+        const originalFetch = window.fetch;
+        let currentFetch = originalFetch;
+
+        function install(target) {
+          try {
+            Object.defineProperty(target, 'fetch', {
+              get() {
+                return currentFetch;
+              },
+              set(val) {
+                console.warn("Intercepted fetch setter on", target, "value type:", typeof val);
+                currentFetch = val;
+              },
+              configurable: true,
+              enumerable: true
+            });
+            return true;
+          } catch (err) {
+            return false;
+          }
+        }
+
+        install(window);
+        install(Window.prototype);
+        if (typeof globalThis !== 'undefined') {
+          install(globalThis);
+        }
+      } catch (e) {
+        console.warn("Unable to fully make window.fetch writable:", e);
+      }
+
+      // Global safeguard to swallow any unhandled TypeErrors related to fetch property setters
+      window.addEventListener('error', function(event) {
+        if (event && event.error && event.error.message && 
+            (event.error.message.indexOf("Cannot set property fetch") !== -1 || 
+             event.error.message.indexOf("only a getter") !== -1)) {
+          console.warn("Intercepted and suppressed fetch assignment error:", event.error);
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      }, true);
+    })();
+  </script>
   
   <!-- Google Fonts: JetBrains Mono & Space Grotesk -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
